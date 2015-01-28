@@ -1,0 +1,14 @@
+{application, ewe,
+ [
+  {description, "Erlang Web Editor"},
+  {vsn, "0.0.1"},
+  {modules, []},
+  {registered, [ewe_sup]},
+  {applications, [kernel, stdlib, crypto, inets]},
+  {mod, {ewe_app, []}},
+  {env,
+   [
+   ]
+  }
+ ]
+}.
