@@ -5,6 +5,7 @@
 -export([start/0, start/2, stop/1]).
 
 start() ->
+    ok = file:set_cwd(code:lib_dir(ewe, priv)),
     application:ensure_all_started(ewe).
 
 start(_StartType, _StartArgs) ->
@@ -12,4 +13,3 @@ start(_StartType, _StartArgs) ->
 
 stop(_State) ->
     ok.
-

@@ -50,34 +50,55 @@ recv_headers(Socket) ->
     end.
 
 
-protocol_of(Headers) ->
+connection_upgrade(Headers) ->
     case proplists:lookup('Connection', Headers) of
         {'Connection', Connection} ->
-            Tokens = [string:strip(Token, both) || Token <- string:tokens(Connection, ",")],
+            Tokens = [ string:strip(Token, both)
+                       || Token <- string:tokens(Connection, ",")],
+
             case lists:member("Upgrade", Tokens) of
                 true ->
-                    case proplists:lookup('Upgrade', Headers) of
-                        {'Upgrade', "websocket"} ->
-                            case proplists:get_value("Sec-Websocket-Version", Headers, 0) of
-                                "13" ->
-                                    case proplists:lookup("Sec-Websocket-Key", Headers) of
-                                        {"Sec-Websocket-Key", _} ->
-                                            websocket;
-                                        none ->
-                                            bad
-                                    end;
-                                _ ->
-                                    bad
-                            end;
-                        _ ->
-                            bad
-                    end;
+                    proplists:lookup('Upgrade', Headers);
                 false ->
-                    http
+                    none
             end;
         _ ->
-            http
+            none
     end.
+
+
+protocol_of(Headers) ->
+    case connection_upgrade(Headers) of
+        {'Upgrade', "websocket"} ->
+            case proplists:get_value("Sec-Websocket-Version", Headers, 0) of
+                "13" ->
+                    case proplists:lookup("Sec-Websocket-Key", Headers) of
+                        {"Sec-Websocket-Key", _} ->
+                            websocket;
+                        none ->
+                            bad
+                    end;
+                _ ->
+                    bad
+            end;
+        none ->
+            http;
+        _ ->
+            bad
+    end.
+
+
+http_response(Socket, Code, ContentType, Body) ->
+    ok =
+        gen_tcp:send(
+          Socket,
+          [<<"HTTP/1.1 ">>, integer_to_list(Code), <<" ">>, httpd_util:reason_phrase(Code), <<"\r\n">>,
+           <<"Connection: close\r\n">>,
+           <<"Content-Type: ">>, ContentType, <<"\r\n">>,
+           <<"Content-Length: ">>,
+           <<"\r\n">>, integer_to_list(iolist_size(Body)),
+           <<"\r\n\r\n">>, Body]),
+    ok = gen_tcp:close(Socket).
 
 
 handle_request(Socket, Method, Path, Version, Headers) ->
@@ -92,53 +113,142 @@ handle_request(Socket, Method, Path, Version, Headers) ->
 
 
 handle_bad_request(Socket, _Method, _Path, _Version, _Headers) ->
-    ok = gen_tcp:send(
-           Socket,
-           [<<"HTTP/1.1 400 Bad Request\r\n">>,
-            <<"Connection: close\r\n">>,
-            <<"Content-Type: text/html\r\n">>,
-            <<"\r\n">>,
-            <<"<h1>400 Bad Request</h1>\r\n">>]),
-    ok = gen_tcp:close(Socket).
-
+    http_response(
+      Socket,
+      400,
+      <<"text/html">>,
+      <<"<h1>400 Bad Request</h1>\n">>).
 
 handle_http_request(Socket, 'GET', {abs_path, "/"}, {1,1}, Headers) ->
-    handle_http_request(Socket, 'GET', {abs_path, "/index.html"}, {1,1}, Headers);
-handle_http_request(Socket, 'GET', {abs_path, "/" ++ Filename}, {1,1}, _Headers) ->
-    case filelib:is_file("priv/"++Filename) of
-        true ->
-            handle_file(Socket, "priv/"++Filename);
-        false ->
-            ok = gen_tcp:send(
-                   Socket,
-                   [<<"HTTP/1.1 404 Not Found\r\n">>,
-                    <<"Connection: close\r\n">>,
-                    <<"Content-Type: text/html\r\n">>,
-                    <<"Content-Length: 22\r\n">>,
-                    <<"\r\n">>, <<"<h1>404 Not Found</h1>">>]),
-            ok = gen_tcp:close(Socket)
+    handle_http_request(Socket, 'GET', {abs_path, "/static/index.html"}, {1,1}, Headers);
+handle_http_request(Socket, 'GET', {abs_path, "/static/" ++ Path}, {1,1}, _Headers) ->
+    handle_file(Socket, [code:lib_dir(ewe, static), "/", Path]);
+handle_http_request(Socket, 'GET', {abs_path, "/file/"}, {1,1}, _Headers) ->
+    Dir = code:lib_dir(ewe, priv),
+    {ok, Filenames} = file:list_dir(Dir),
+    Filenames1 =
+        lists:filter(
+          fun (Name) ->
+                  ".erl" =:= filename:extension(Name)
+          end, Filenames),
+
+    Filenames2 =
+        [ io_lib:format("~p", [Name])
+          || Name <- Filenames1],
+
+    JSON = ["[", string:join(Filenames2, ", "), "]"],
+
+    http_response(Socket, 200, <<"text/json">>, JSON);
+handle_http_request(Socket, 'GET', {abs_path, "/file/" ++ Path}, {1,1}, _Headers) ->
+    handle_file(Socket, [code:lib_dir(ewe, priv), "/", Path]);
+handle_http_request(Socket, 'PUT', {abs_path, "/file/" ++ Path}, {1,1}, Headers) ->
+    {'Content-Length', ContentLength} = proplists:lookup('Content-Length', Headers),
+    case list_to_integer(ContentLength) of
+        0 ->
+            Bytes = <<>>;
+        Length ->
+            {ok, Bytes} = gen_tcp:recv(Socket, Length)
+    end,
+    Filename = [code:lib_dir(ewe, priv), "/", Path],
+    case file:write_file(Filename, Bytes) of
+        ok ->
+            http_response(
+              Socket,
+              200,
+              <<"text/html">>,
+              <<"<h1>200 OK</h1>\n">>);
+        _ ->
+            http_response(
+              Socket,
+              500,
+              <<"text/html">>,
+              <<"<h1>500 Internal Server Error</h1>\n">>)
+    end;
+handle_http_request(Socket, "COMPILE", {abs_path, "/file/" ++ Path}, {1,1}, _Headers) ->
+    handle_compile_result(Socket, compile:file(Path, [return]));
+handle_http_request(Socket, "LOAD", {abs_path, "/file/" ++ Path}, {1,1}, _Headers) ->
+    Module = list_to_atom(filename:basename(Path, ".erl")),
+    code:purge(Module),
+    case code:load_file(Module) of
+        {module, Module} ->
+            http_response(
+              Socket,
+              200,
+              <<"text/html">>,
+              <<"<h1>200 OK</h1>\n">>);
+        {error, Reason} ->
+            http_response(
+              Socket,
+              400,
+              <<"text/plain">>,
+              io_lib:format("~p~n", [Reason]))
     end.
 
 
-handle_file(Socket, Filename) ->
-    {ok, #file_info{size=Size}} = file:read_file_info(Filename, []),
-    Ext = filename:extension(Filename),
-    MimeType =
-        proplists:get_value(
-          Ext,
-          [{".html", <<"text/html;charset=utf-8">>},
-           {".js", <<"text/javascript">>}],
-         <<"application/octet-stream">>),
+handle_compile_result(Socket, {ok, _}) ->
+    http_response(
+      Socket,
+      200,
+      <<"text/plain">>,
+      <<"">>);
+handle_compile_result(Socket, {ok, _, Warnings}) ->
+    http_response(
+      Socket,
+      200,
+      <<"text/plain">>,
+      format_compile_errors(<<"Warning">>, Warnings));
+handle_compile_result(Socket, {error, Errors, Warnings}) ->
+    http_response(
+      Socket,
+      400,
+      <<"text/plain">>,
+      [ format_compile_errors(<<"Error">>, Errors),
+        format_compile_errors(<<"Warning">>, Warnings)]).
 
-    ok = gen_tcp:send(
-           Socket,
-           [<<"HTTP/1.1 200 OK\r\n">>,
-            <<"Connection: close\r\n">>,
-            <<"Content-Type: ">>, MimeType, <<"\r\n">>,
-            <<"Content-Length: ">>, integer_to_binary(Size), <<"\r\n">>,
-            <<"\r\n">>]),
-    {ok, _} = file:sendfile(Filename, Socket),
-    ok = gen_tcp:close(Socket).
+
+format_compile_error(Type, Name, Error) ->
+    [ case L of
+          none ->
+              [Name, <<": ">>, Type, <<": ">>, M:format_error(E), <<"\n">>];
+          _ ->
+              [Name, <<":">>, integer_to_list(L), <<": ">>, Type, <<": ">>, M:format_error(E), <<"\n">>]
+      end || {L,M,E} <- Error].
+
+format_compile_errors(Type, Errors) ->
+    [format_compile_error(Type, Name, Error)
+     || {Name, Error} <- Errors].
+
+
+handle_file(Socket, Filename) ->
+    case filelib:is_file(Filename) of
+        false ->
+            http_response(
+              Socket,
+              404,
+              <<"text/html">>,
+              <<"<h1>404 Not Found</h1>\n">>);
+        true ->
+            {ok, #file_info{size=Size}} = file:read_file_info(Filename, []),
+            Ext = filename:extension(Filename),
+            MimeType =
+                proplists:get_value(
+                  Ext,
+                  [{".html", <<"text/html;charset=utf-8">>},
+                   {".js", <<"text/javascript;charset=utf-8">>},
+                   {".css", <<"text/css;charset=utf-8">>},
+                   {".erl", <<"text/plain">>}],
+                  <<"application/octet-stream">>),
+
+            ok = gen_tcp:send(
+                   Socket,
+                   [<<"HTTP/1.1 200 OK\r\n">>,
+                    <<"Connection: close\r\n">>,
+                    <<"Content-Type: ">>, MimeType, <<"\r\n">>,
+                    <<"Content-Length: ">>, integer_to_binary(Size), <<"\r\n">>,
+                    <<"\r\n">>]),
+            {ok, _} = file:sendfile(Filename, Socket),
+            ok = gen_tcp:close(Socket)
+    end.
 
 
 handle_websocket_request(Socket, _Method, _Path, _Version, Headers) ->
@@ -314,10 +424,10 @@ mask(<<>>, _, Acc) ->
 %%% io_request, handle io requests from the user process,
 %%% Note, this is not the real I/O-protocol, but the mockup version
 %%% used between edlin and a user_driver. The protocol tags are
-%%% similar, but the message set is different. 
+%%% similar, but the message set is different.
 %%% The protocol only exists internally between edlin and a character
 %%% displaying device...
-%%% We are *not* really unicode aware yet, we just filter away character 
+%%% We are *not* really unicode aware yet, we just filter away character
 %%% beyond the latin1 range. We however handle the unicode binaries...
 io_request({window_change, OldTty}, Buf, Tty) ->
     window_change(Tty, OldTty, Buf);
@@ -432,7 +542,7 @@ window_change(Tty, OldTty, {Buf, BufTail, Col}) ->
     S = lists:reverse(Buf, [BufTail | lists:duplicate(N, $ )]),
     M2 = move_cursor(length(Buf) + length(BufTail) + N, Col, Tty),
     {[M1, S | M2], {Buf, BufTail, Col}}.
-    
+
 %% move around in buffer, respecting pad characters
 step_over(0, Buf, [?PAD | BufTail], Col) ->
     {[?PAD | Buf], BufTail, Col+1};
@@ -493,4 +603,4 @@ ifelse(Cond, A, B) ->
     case Cond of
 	true -> A;
 	_ -> B
-    end.	    
+    end.

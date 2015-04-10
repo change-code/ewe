@@ -1,5 +1,5 @@
 $ rebar compile
-$ erl -pz ebin -s ewe_app
+$ erl -pz "$(pwd)/ebin" -s ewe_app
 
 $ firefox 'http://127.0.0.1:9999/'
 

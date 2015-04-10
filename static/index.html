@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Erlang Web Editor</title>
+  <link rel="stylesheet" type="text/css" href="/static/base.css" />
+  <script type="application/javascript;version=1.8" src="/static/shell.js"></script>
+  <script type="text/javascript" src="/static/term.js"></script>
+  <script type="text/javascript" src="/static/ace/ace.js"></script>
+
+</head>
+<body class="hbox">
+  <div id="left-container" class="vbox">
+    <div class="toolbar">
+      <button id="create-file" disabled="disabled">New</button>
+      <button id="refresh-filelist" disabled="disabled">Refresh</button>
+    </div>
+    <ul id="filelist"></ul>
+  </div>
+
+  <div id="right-container" class="vbox">
+    <div id="top-container" class="vbox">
+      <div class="toolbar">
+        <button id="save-file" disabled="disabled">Save</button>
+        <button id="compile-file" disabled="disabled">Compile</button>
+        <button id="load-file" disabled="disabled">Load</button>
+      </div>
+      <div id="editor"></div>
+    </div>
+    <div id="bottom-container">
+      <ul class="tabbar">
+        <li><button id="toggle-error-log">Error Log</button></li>
+        <li><button id="toggle-erlang-shell">Erlang Shell</button></li>
+        <li><button id="toggle-compile-log">Compile Log</button></li>
+      </ul>
+
+      <div id="error-log-container" class="tab">
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th><th>Time</th><th>Description</th>
+            </tr>
+          </thead>
+          <tbody id="error-log"></tbody>
+        </table>
+      </div>
+      <div id="erlang-shell-container" class="tab">
+        <div id="erlang-shell"></div>
+      </div>
+      <div id="compile-log-container" class="tab">
+        <pre id="compile-log"></pre>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

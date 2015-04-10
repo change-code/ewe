@@ -1,0 +1,197 @@
+html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height:100%;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    height:100%;
+    background-color: #EEEEEE;
+}
+
+button {
+    background: none;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+button:focus {
+    outline: none;
+}
+
+button::-moz-focus-inner {
+    border: none;
+}
+
+.vbox {
+    display: flex;
+    flex-direction: column;
+}
+
+.hbox {
+    display: flex;
+    flex-direction: row;
+}
+
+#left-container {
+    flex: 0 0 auto;
+    width: 200px;
+    border-right: 3px solid #444444;
+}
+
+#right-container {
+    flex: 1 0 auto;
+}
+
+#top-container {
+    flex: 1 0 auto;
+}
+
+#editor {
+    flex: 1 0 auto;
+    font-size: 16px;
+}
+
+#bottom-container {
+    flex: 0 0 auto;
+    padding-top: 0.25em;
+}
+
+#error-log-container {
+    background: #FFFFFF;
+}
+
+#error-log-container table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#error-log-container table th,
+#error-log-container table td {
+    background: #FFFFFF;
+    border: 1px dashed black;
+}
+
+#compile-log-container {
+    background-color: #FFFFFF;
+}
+
+pre#compile-log {
+    margin: 0;
+    padding: 0.25em;
+}
+
+ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+ul#filelist {
+    padding-left: 0.5em;
+    background-color: #FFFFFF;
+    height: 100%;
+}
+
+ul#filelist li {
+    padding: 0.25em 0.5em;
+    font-family: monospace;
+    display: flex;
+}
+
+ul#filelist>li.selected {
+    background: #444444;
+}
+
+ul#filelist>li.selected * {
+    color: #DDDDDD;
+    font-weight: bold;
+}
+
+ul#filelist>li:not(.selected):hover {
+    background: #DDDDDD;
+}
+
+ul#filelist>li>button {
+    text-align: left;
+    flex: 1 0 auto;
+}
+
+ul#filelist>li>button.delete {
+    flex: 0 0 auto;
+    visibility: hidden;
+}
+
+ul#filelist>li:not(.selected):hover>button.delete {
+    visibility: visible;
+}
+
+
+ul.tabbar {
+    flex: 0 0 auto;
+    border-bottom: 1px solid #444444;
+    padding: 0.5em 0.5em 0;
+}
+
+ul.tabbar>li {
+    display: inline-block;
+    border: solid #444444;
+    border-width: 1px 1px 0;
+    padding: 0.25em 0.5em 0;
+    font-weight: bold;
+    margin: 0 0.25em;
+    border-radius: 0.25em 0.25em 0 0;
+}
+
+ul.tabbar>li.selected {
+    background: #444444;
+}
+
+ul.tabbar>li.selected button {
+    color: #DDDDDD;
+}
+
+div.tab {
+    flex: 1 0 auto;
+    display: none;
+    height: 200px;
+    overflow-y: auto;
+}
+
+div.tab.active {
+    display: block;
+}
+
+.toolbar {
+    flex: 0 0 auto;
+    padding: 0.25em 0.5em;
+    border-bottom: 1px solid #444444;
+}
+
+.toolbar>button {
+    padding: 0.25em 0.5em;
+    border: 1px outset #EEEEEE;
+    border-radius: 0.25em;
+}
+
+.toolbar>button:enabled:hover {
+    border: 1px outset #444444;
+}
+
+.toolbar>button:enabled:active {
+    border: 1px inset #444444;
+}
+
+div.terminal {
+    font-family: monospace;
+    font-size: 16px;
+}
+
+span.terminal-cursor {
+    color: #000000;
+    background: #FFFFFF;
+}
